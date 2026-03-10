@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, useScroll, useTransform, useSpring, AnimatePresence } from "framer-motion";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Menu, X } from "lucide-react";
 
 const NAV_LINKS = [
   { label: "Research", href: "#research" },
@@ -76,6 +76,7 @@ const Index = () => {
   const scrolled = useScrolled();
   const { scrollY } = useScroll();
   const smoothScrollY = useSpring(scrollY, { stiffness: 80, damping: 20 });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Parallax for hero text
   const heroY = useTransform(smoothScrollY, [0, 600], [0, 80]);
@@ -83,8 +84,19 @@ const Index = () => {
 
   const handleNavClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
+    setMobileMenuOpen(false);
     smoothScrollTo(href);
   }, []);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileMenuOpen]);
 
   const [activeSection, setActiveSection] = useState("");
 
@@ -153,8 +165,81 @@ const Index = () => {
                 </a>
               ))}
             </div>
+
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden flex items-center justify-center w-9 h-9 rounded-lg text-foreground hover:bg-foreground/[0.06] transition-colors duration-300"
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile menu — glass slide-out */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <>
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="fixed inset-0 z-40 bg-foreground/10 backdrop-blur-sm md:hidden"
+                onClick={() => setMobileMenuOpen(false)}
+              />
+              {/* Panel */}
+              <motion.div
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+                className="fixed top-0 right-0 bottom-0 z-50 w-72 glass-panel-strong md:hidden flex flex-col"
+              >
+                <div className="flex items-center justify-between px-6 h-16 border-b border-border/30">
+                  <span className="text-sm font-medium tracking-tight">Menu</span>
+                  <button
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-foreground/[0.06] transition-colors"
+                    aria-label="Close menu"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <nav className="flex flex-col gap-1 p-4 flex-1">
+                  {NAV_LINKS.map((link, i) => (
+                    <motion.a
+                      key={link.href}
+                      href={link.href}
+                      onClick={(e) => handleNavClick(e, link.href)}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 + i * 0.06, duration: 0.3 }}
+                      className={`text-sm tracking-wide px-4 py-3 rounded-lg transition-all duration-300 ${
+                        activeSection === link.href.replace("#", "")
+                          ? "text-foreground bg-foreground/[0.06]"
+                          : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04]"
+                      }`}
+                    >
+                      {link.label}
+                    </motion.a>
+                  ))}
+                  <motion.a
+                    href="#"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.28, duration: 0.3 }}
+                    className="text-sm tracking-wide px-4 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] transition-all duration-300"
+                  >
+                    Careers
+                  </motion.a>
+                </nav>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </motion.nav>
 
       {/* Hero */}
