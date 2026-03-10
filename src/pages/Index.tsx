@@ -440,7 +440,7 @@ const Index = () => {
               © {new Date().getFullYear()} Complexia. All rights reserved.
             </p>
           </div>
-          <div className="flex gap-6">
+          <div className="flex flex-wrap gap-6">
             {NAV_LINKS.map((link) => (
               <a
                 key={link.href}
@@ -451,9 +451,10 @@ const Index = () => {
                 {link.label}
               </a>
             ))}
-            <a href="#" className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-300">
-              Careers
-            </a>
+            <Link to="/careers" className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-300">Careers</Link>
+            <Link to="/partners" className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-300">Partners</Link>
+            <Link to="/terms" className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-300">Terms</Link>
+            <Link to="/policies" className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-300">Policies</Link>
           </div>
         </div>
       </footer>
