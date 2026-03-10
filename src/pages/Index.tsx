@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { motion, useScroll, useTransform, useSpring, AnimatePresence } from "framer-motion";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 
 const NAV_LINKS = [
@@ -30,7 +31,7 @@ const RESEARCH_AREAS = [
   },
 ];
 
-function useScrolled(threshold = 20) {
+function useScrolled(threshold = 10) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > threshold);
@@ -38,85 +39,6 @@ function useScrolled(threshold = 20) {
     return () => window.removeEventListener("scroll", onScroll);
   }, [threshold]);
   return scrolled;
-}
-
-function useScrollY() {
-  const [y, setY] = useState(0);
-  useEffect(() => {
-    const onScroll = () => setY(window.scrollY);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-  return y;
-}
-
-function FadeInSection({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  const [visible, setVisible] = useState(false);
-  const ref = useIntersection(setVisible);
-  return (
-    <div
-      ref={ref}
-      className={`transition-all duration-700 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"} ${className}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function useIntersection(onVisible: (v: boolean) => void) {
-  const [ref, setRef] = useState<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!ref) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) onVisible(true); },
-      { threshold: 0.15 }
-    );
-    observer.observe(ref);
-    return () => observer.disconnect();
-  }, [ref, onVisible]);
-  return setRef;
-}
-
-function FloatingGrid({ scrollY }: { scrollY: number }) {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.04]">
-      {/* Horizontal lines that shift with scroll */}
-      {Array.from({ length: 12 }).map((_, i) => (
-        <div
-          key={`h-${i}`}
-          className="absolute left-0 right-0 h-px bg-foreground"
-          style={{
-            top: `${(i * 9) + (scrollY * 0.02 * (i % 3 === 0 ? 1 : -0.5)) % 4}%`,
-            opacity: 0.5 + (Math.sin(scrollY * 0.003 + i) * 0.5),
-          }}
-        />
-      ))}
-      {/* Vertical lines */}
-      {Array.from({ length: 8 }).map((_, i) => (
-        <div
-          key={`v-${i}`}
-          className="absolute top-0 bottom-0 w-px bg-foreground"
-          style={{
-            left: `${(i * 14) + 2}%`,
-            opacity: 0.3 + (Math.sin(scrollY * 0.004 + i * 1.5) * 0.3),
-          }}
-        />
-      ))}
-      {/* Floating dots */}
-      {Array.from({ length: 20 }).map((_, i) => (
-        <div
-          key={`d-${i}`}
-          className="absolute w-1 h-1 rounded-full bg-foreground"
-          style={{
-            left: `${10 + (i * 17) % 80}%`,
-            top: `${5 + (i * 23) % 90}%`,
-            transform: `translate(${Math.sin(scrollY * 0.005 + i) * 15}px, ${Math.cos(scrollY * 0.003 + i * 0.7) * 15}px)`,
-            opacity: 0.4 + Math.sin(scrollY * 0.006 + i * 2) * 0.4,
-          }}
-        />
-      ))}
-    </div>
-  );
 }
 
 function smoothScrollTo(href: string) {
@@ -132,223 +54,325 @@ function smoothScrollTo(href: string) {
   }
 }
 
+const sectionVariants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.8, ease: [0.25, 0.4, 0.25, 1] },
+  },
+};
+
+const staggerContainer = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.12, delayChildren: 0.1 },
+  },
+};
+
+const childFade = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, ease: [0.25, 0.4, 0.25, 1] },
+  },
+};
+
 const Index = () => {
   const scrolled = useScrolled();
-  const scrollY = useScrollY();
+  const { scrollY } = useScroll();
+  const smoothScrollY = useSpring(scrollY, { stiffness: 80, damping: 20 });
+
+  // Parallax for hero text
+  const heroY = useTransform(smoothScrollY, [0, 600], [0, 80]);
+  const heroOpacity = useTransform(smoothScrollY, [0, 400], [1, 0]);
 
   const handleNavClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
     smoothScrollTo(href);
   }, []);
 
-  return (
-    <div className="min-h-screen bg-background text-foreground relative">
-      {/* Background pattern */}
-      <FloatingGrid scrollY={scrollY} />
+  const [activeSection, setActiveSection] = useState("");
 
-      {/* Navigation */}
-      <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled ? "bg-background/90 backdrop-blur-md border-b border-border" : ""
-        }`}
+  useEffect(() => {
+    const sections = ["research", "safety", "company"];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setActiveSection(entry.target.id);
+          }
+        });
+      },
+      { rootMargin: "-40% 0px -40% 0px" }
+    );
+    sections.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden">
+      {/* Subtle background texture */}
+      <div className="pointer-events-none fixed inset-0 z-0 opacity-[0.025]"
+        style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, hsl(var(--foreground)) 0.5px, transparent 0)`,
+          backgroundSize: '24px 24px',
+        }}
+      />
+
+      {/* Navigation — liquid glass */}
+      <motion.nav
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
+        className="fixed top-0 left-0 right-0 z-50"
       >
-        <div className="max-w-6xl mx-auto px-6 md:px-10 flex items-center justify-between h-16">
-          <a
-            href="#"
-            onClick={(e) => handleNavClick(e, "#")}
-            className="font-serif text-xl font-semibold tracking-tight text-foreground"
-            style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}
-          >
-            Complexia
-          </a>
-          <div className="hidden md:flex items-center gap-8">
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                onClick={(e) => handleNavClick(e, link.href)}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {link.label}
-              </a>
-            ))}
+        <div className={`mx-4 md:mx-8 mt-3 rounded-xl transition-all duration-500 ease-out ${
+          scrolled
+            ? "glass-panel-strong shadow-lg"
+            : "bg-transparent"
+        }`}>
+          <div className="max-w-6xl mx-auto px-5 md:px-8 flex items-center justify-between h-14">
+            <a
+              href="#"
+              onClick={(e) => handleNavClick(e, "#")}
+              className="text-base font-medium tracking-tight text-foreground hover:opacity-70 transition-opacity duration-300"
+            >
+              Complexia
+            </a>
+            <div className="hidden md:flex items-center gap-1">
+              {NAV_LINKS.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  onClick={(e) => handleNavClick(e, link.href)}
+                  className={`relative text-xs tracking-wide px-4 py-2 rounded-lg transition-all duration-300 ${
+                    activeSection === link.href.replace("#", "")
+                      ? "text-foreground bg-foreground/[0.06]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04]"
+                  }`}
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
           </div>
         </div>
-      </nav>
+      </motion.nav>
 
       {/* Hero */}
-      <section className="min-h-[90vh] flex flex-col justify-center px-6 md:px-10 max-w-6xl mx-auto pt-16 relative">
-        <FadeInSection>
-          <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground mb-6">AI Research & Safety</p>
-          <h1
-            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-light leading-[1.1] tracking-tight max-w-4xl"
-            style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}
+      <section className="min-h-screen flex flex-col justify-center px-6 md:px-10 max-w-5xl mx-auto pt-20 relative">
+        <motion.div
+          style={{ y: heroY, opacity: heroOpacity }}
+        >
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
           >
-            Building reliable, <br className="hidden sm:block" />
-            interpretable AI systems.
-          </h1>
-          <p className="mt-8 text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed">
-            Complexia is an AI research company focused on developing safe, scalable models
-            that humans can understand, trust, and direct.
-          </p>
-          <div className="mt-10 flex gap-4">
-            <a
-              href="#research"
-              onClick={(e) => handleNavClick(e, "#research")}
-              className="inline-flex items-center gap-2 bg-foreground text-background px-6 py-3 text-sm font-medium rounded-sm hover:opacity-90 transition-opacity"
+            <motion.p
+              variants={childFade}
+              className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-8"
             >
-              Our Research <ArrowRight className="w-4 h-4" />
-            </a>
-          </div>
-        </FadeInSection>
+              AI Research & Safety
+            </motion.p>
+            <motion.h1
+              variants={childFade}
+              className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.5rem] font-medium leading-[1.15] tracking-tight max-w-3xl"
+            >
+              Building reliable,{" "}
+              <br className="hidden sm:block" />
+              interpretable AI systems.
+            </motion.h1>
+            <motion.p
+              variants={childFade}
+              className="mt-8 text-sm md:text-base text-muted-foreground max-w-xl leading-relaxed font-normal"
+            >
+              Complexia is an AI research company focused on developing safe, 
+              scalable models that humans can understand, trust, and direct.
+            </motion.p>
+            <motion.div variants={childFade} className="mt-10">
+              <a
+                href="#research"
+                onClick={(e) => handleNavClick(e, "#research")}
+                className="group inline-flex items-center gap-2.5 bg-foreground text-background px-5 py-2.5 text-xs font-medium tracking-wide rounded-lg hover:opacity-85 transition-all duration-300"
+              >
+                Our Research
+                <ArrowRight className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
+              </a>
+            </motion.div>
+          </motion.div>
+        </motion.div>
       </section>
 
-      {/* Divider */}
-      <div className="max-w-6xl mx-auto px-6 md:px-10 relative">
-        <div className="border-t border-border" />
-      </div>
-
       {/* Research */}
-      <section id="research" className="py-24 md:py-32 px-6 md:px-10 max-w-6xl mx-auto scroll-mt-20 relative">
-        <FadeInSection>
-          <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground mb-4">Research</p>
-          <h2
-            className="text-3xl md:text-4xl font-light tracking-tight max-w-2xl"
-            style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}
+      <section id="research" className="scroll-mt-24 relative">
+        <div className="max-w-5xl mx-auto px-6 md:px-10">
+          <div className="border-t border-border" />
+        </div>
+        <div className="py-24 md:py-32 px-6 md:px-10 max-w-5xl mx-auto">
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-100px" }}
           >
-            Advancing the frontier of AI, responsibly.
-          </h2>
-          <p className="mt-6 text-muted-foreground max-w-xl leading-relaxed">
-            Our work spans the core challenges of modern AI—from scaling laws and mechanistic
-            interpretability to the alignment problem itself.
-          </p>
-        </FadeInSection>
+            <motion.p variants={childFade} className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-5">
+              Research
+            </motion.p>
+            <motion.h2 variants={childFade} className="text-2xl md:text-3xl font-medium tracking-tight max-w-2xl">
+              Advancing the frontier of AI, responsibly.
+            </motion.h2>
+            <motion.p variants={childFade} className="mt-5 text-sm text-muted-foreground max-w-lg leading-relaxed">
+              Our work spans the core challenges of modern AI — from scaling laws and
+              mechanistic interpretability to the alignment problem itself.
+            </motion.p>
+          </motion.div>
 
-        <div className="mt-16 grid gap-px bg-border sm:grid-cols-2">
-          {RESEARCH_AREAS.map((area, i) => (
-            <FadeInSection key={area.title}>
-              <div className="bg-background p-8 md:p-10 group cursor-pointer hover:bg-card transition-colors h-full">
-                <span className="text-xs text-muted-foreground font-mono">0{i + 1}</span>
-                <h3
-                  className="mt-4 text-xl font-normal tracking-tight"
-                  style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}
-                >
+          <motion.div
+            className="mt-16 grid gap-px bg-border sm:grid-cols-2 rounded-lg overflow-hidden"
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-50px" }}
+          >
+            {RESEARCH_AREAS.map((area, i) => (
+              <motion.div
+                key={area.title}
+                variants={childFade}
+                className="bg-background p-7 md:p-9 group cursor-pointer hover:bg-card transition-all duration-500 h-full"
+              >
+                <span className="text-[10px] text-muted-foreground tracking-wider">0{i + 1}</span>
+                <h3 className="mt-4 text-base font-medium tracking-tight">
                   {area.title}
                 </h3>
-                <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+                <p className="mt-3 text-xs text-muted-foreground leading-relaxed">
                   {area.description}
                 </p>
-                <div className="mt-6 flex items-center gap-1 text-sm text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                  Read more <ArrowUpRight className="w-3.5 h-3.5" />
+                <div className="mt-5 flex items-center gap-1 text-xs text-foreground opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
+                  Read more <ArrowUpRight className="w-3 h-3" />
                 </div>
-              </div>
-            </FadeInSection>
-          ))}
+              </motion.div>
+            ))}
+          </motion.div>
         </div>
       </section>
 
       {/* Safety */}
-      <section id="safety" className="bg-card scroll-mt-20 relative">
-        <div className="py-24 md:py-32 px-6 md:px-10 max-w-6xl mx-auto">
-          <FadeInSection>
-            <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground mb-4">Safety & Responsibility</p>
-            <h2
-              className="text-3xl md:text-4xl font-light tracking-tight max-w-2xl"
-              style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}
-            >
-              Safety is not a feature. <br className="hidden md:block" />
+      <section id="safety" className="bg-card scroll-mt-24 relative">
+        <div className="py-24 md:py-32 px-6 md:px-10 max-w-5xl mx-auto">
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-100px" }}
+          >
+            <motion.p variants={childFade} className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-5">
+              Safety & Responsibility
+            </motion.p>
+            <motion.h2 variants={childFade} className="text-2xl md:text-3xl font-medium tracking-tight max-w-2xl">
+              Safety is not a feature.{" "}
+              <br className="hidden md:block" />
               It is the foundation.
-            </h2>
-          </FadeInSection>
-          <div className="mt-12 grid md:grid-cols-2 gap-12 md:gap-20">
-            <FadeInSection>
-              <p className="text-muted-foreground leading-relaxed">
+            </motion.h2>
+          </motion.div>
+
+          <div className="mt-14 grid md:grid-cols-2 gap-12 md:gap-20">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, delay: 0.2 }}
+            >
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 We believe that as AI systems grow in capability, the imperative for safety grows
-                proportionally. Every model we build is evaluated not just for its performance, but
-                for its failure modes, biases, and potential for misuse.
+                proportionally. Every model we build is evaluated not just for performance, but
+                for failure modes, biases, and potential for misuse.
               </p>
-              <p className="mt-6 text-muted-foreground leading-relaxed">
+              <p className="mt-5 text-sm text-muted-foreground leading-relaxed">
                 Our safety team operates independently, with the authority to delay or halt any
                 deployment that does not meet our rigorous internal standards.
               </p>
-            </FadeInSection>
-            <FadeInSection>
-              <div className="border-l border-border pl-8">
-                <blockquote
-                  className="text-xl md:text-2xl font-light leading-snug tracking-tight"
-                  style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}
-                >
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, delay: 0.35 }}
+            >
+              <div className="border-l border-border pl-7">
+                <blockquote className="text-lg md:text-xl font-medium leading-snug tracking-tight">
                   "The measure of an AI lab is not the power of its models, but the care with which
                   it deploys them."
                 </blockquote>
-                <p className="mt-6 text-sm text-muted-foreground">— Complexia Safety Charter</p>
+                <p className="mt-5 text-[11px] text-muted-foreground tracking-wide">— Complexia Safety Charter</p>
               </div>
-            </FadeInSection>
+            </motion.div>
           </div>
         </div>
       </section>
 
       {/* Company */}
-      <section id="company" className="py-24 md:py-32 px-6 md:px-10 max-w-6xl mx-auto scroll-mt-20 relative">
-        <FadeInSection>
-          <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground mb-4">Company</p>
-          <h2
-            className="text-3xl md:text-4xl font-light tracking-tight max-w-2xl"
-            style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}
-          >
+      <section id="company" className="py-24 md:py-32 px-6 md:px-10 max-w-5xl mx-auto scroll-mt-24 relative">
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-100px" }}
+        >
+          <motion.p variants={childFade} className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-5">
+            Company
+          </motion.p>
+          <motion.h2 variants={childFade} className="text-2xl md:text-3xl font-medium tracking-tight max-w-2xl">
             A team committed to getting AI right.
-          </h2>
-        </FadeInSection>
-        <div className="mt-12 grid md:grid-cols-3 gap-12">
-          <FadeInSection>
-            <h3 className="text-sm uppercase tracking-[0.15em] text-muted-foreground mb-3">Mission</h3>
-            <p className="text-foreground leading-relaxed">
-              To develop AI systems that are safe, beneficial, and understandable—advancing
-              the science of intelligence while keeping humans in control.
-            </p>
-          </FadeInSection>
-          <FadeInSection>
-            <h3 className="text-sm uppercase tracking-[0.15em] text-muted-foreground mb-3">Culture</h3>
-            <p className="text-foreground leading-relaxed">
-              We foster intellectual honesty, long-term thinking, and deep technical rigor. We
-              hire researchers and engineers who care as much about the consequences of their work
-              as its novelty.
-            </p>
-          </FadeInSection>
-          <FadeInSection>
-            <h3 className="text-sm uppercase tracking-[0.15em] text-muted-foreground mb-3">Approach</h3>
-            <p className="text-foreground leading-relaxed">
-              We publish our research, share our safety evaluations, and engage openly with the
-              broader AI community. Transparency is not optional—it is how trust is built.
-            </p>
-          </FadeInSection>
-        </div>
+          </motion.h2>
+        </motion.div>
+
+        <motion.div
+          className="mt-14 grid md:grid-cols-3 gap-10"
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: "-50px" }}
+        >
+          {[
+            { label: "Mission", text: "To develop AI systems that are safe, beneficial, and understandable — advancing the science of intelligence while keeping humans in control." },
+            { label: "Culture", text: "We foster intellectual honesty, long-term thinking, and deep technical rigor. We hire people who care as much about consequences as novelty." },
+            { label: "Approach", text: "We publish our research, share safety evaluations, and engage openly with the broader AI community. Transparency is how trust is built." },
+          ].map((item) => (
+            <motion.div key={item.label} variants={childFade}>
+              <h3 className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground mb-3">{item.label}</h3>
+              <p className="text-sm text-foreground leading-relaxed">{item.text}</p>
+            </motion.div>
+          ))}
+        </motion.div>
       </section>
 
       {/* Footer */}
       <footer className="border-t border-border relative">
-        <div className="max-w-6xl mx-auto px-6 md:px-10 py-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="max-w-5xl mx-auto px-6 md:px-10 py-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
-            <span
-              className="text-lg font-semibold tracking-tight"
-              style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}
-            >
-              Complexia
-            </span>
-            <p className="text-xs text-muted-foreground mt-1">© {new Date().getFullYear()} Complexia. All rights reserved.</p>
+            <span className="text-sm font-medium tracking-tight">Complexia</span>
+            <p className="text-[10px] text-muted-foreground mt-1 tracking-wide">
+              © {new Date().getFullYear()} Complexia. All rights reserved.
+            </p>
           </div>
-          <div className="flex gap-8">
+          <div className="flex gap-6">
             {NAV_LINKS.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
                 onClick={(e) => handleNavClick(e, link.href)}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-300"
               >
                 {link.label}
               </a>
             ))}
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <a href="#" className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-300">
               Careers
             </a>
           </div>
