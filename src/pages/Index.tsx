@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 
 const NAV_LINKS = [
@@ -40,6 +40,16 @@ function useScrolled(threshold = 20) {
   return scrolled;
 }
 
+function useScrollY() {
+  const [y, setY] = useState(0);
+  useEffect(() => {
+    const onScroll = () => setY(window.scrollY);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  return y;
+}
+
 function FadeInSection({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   const [visible, setVisible] = useState(false);
   const ref = useIntersection(setVisible);
@@ -67,11 +77,75 @@ function useIntersection(onVisible: (v: boolean) => void) {
   return setRef;
 }
 
+function FloatingGrid({ scrollY }: { scrollY: number }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.04]">
+      {/* Horizontal lines that shift with scroll */}
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div
+          key={`h-${i}`}
+          className="absolute left-0 right-0 h-px bg-foreground"
+          style={{
+            top: `${(i * 9) + (scrollY * 0.02 * (i % 3 === 0 ? 1 : -0.5)) % 4}%`,
+            opacity: 0.5 + (Math.sin(scrollY * 0.003 + i) * 0.5),
+          }}
+        />
+      ))}
+      {/* Vertical lines */}
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={`v-${i}`}
+          className="absolute top-0 bottom-0 w-px bg-foreground"
+          style={{
+            left: `${(i * 14) + 2}%`,
+            opacity: 0.3 + (Math.sin(scrollY * 0.004 + i * 1.5) * 0.3),
+          }}
+        />
+      ))}
+      {/* Floating dots */}
+      {Array.from({ length: 20 }).map((_, i) => (
+        <div
+          key={`d-${i}`}
+          className="absolute w-1 h-1 rounded-full bg-foreground"
+          style={{
+            left: `${10 + (i * 17) % 80}%`,
+            top: `${5 + (i * 23) % 90}%`,
+            transform: `translate(${Math.sin(scrollY * 0.005 + i) * 15}px, ${Math.cos(scrollY * 0.003 + i * 0.7) * 15}px)`,
+            opacity: 0.4 + Math.sin(scrollY * 0.006 + i * 2) * 0.4,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function smoothScrollTo(href: string) {
+  const id = href.replace("#", "");
+  if (!id) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+  const el = document.getElementById(id);
+  if (el) {
+    const top = el.getBoundingClientRect().top + window.scrollY - 80;
+    window.scrollTo({ top, behavior: "smooth" });
+  }
+}
+
 const Index = () => {
   const scrolled = useScrolled();
+  const scrollY = useScrollY();
+
+  const handleNavClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault();
+    smoothScrollTo(href);
+  }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground relative">
+      {/* Background pattern */}
+      <FloatingGrid scrollY={scrollY} />
+
       {/* Navigation */}
       <nav
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
@@ -79,7 +153,12 @@ const Index = () => {
         }`}
       >
         <div className="max-w-6xl mx-auto px-6 md:px-10 flex items-center justify-between h-16">
-          <a href="#" className="font-serif text-xl font-semibold tracking-tight text-foreground" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>
+          <a
+            href="#"
+            onClick={(e) => handleNavClick(e, "#")}
+            className="font-serif text-xl font-semibold tracking-tight text-foreground"
+            style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}
+          >
             Complexia
           </a>
           <div className="hidden md:flex items-center gap-8">
@@ -87,6 +166,7 @@ const Index = () => {
               <a
                 key={link.href}
                 href={link.href}
+                onClick={(e) => handleNavClick(e, link.href)}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 {link.label}
@@ -97,7 +177,7 @@ const Index = () => {
       </nav>
 
       {/* Hero */}
-      <section className="min-h-[90vh] flex flex-col justify-center px-6 md:px-10 max-w-6xl mx-auto pt-16">
+      <section className="min-h-[90vh] flex flex-col justify-center px-6 md:px-10 max-w-6xl mx-auto pt-16 relative">
         <FadeInSection>
           <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground mb-6">AI Research & Safety</p>
           <h1
@@ -114,6 +194,7 @@ const Index = () => {
           <div className="mt-10 flex gap-4">
             <a
               href="#research"
+              onClick={(e) => handleNavClick(e, "#research")}
               className="inline-flex items-center gap-2 bg-foreground text-background px-6 py-3 text-sm font-medium rounded-sm hover:opacity-90 transition-opacity"
             >
               Our Research <ArrowRight className="w-4 h-4" />
@@ -123,12 +204,12 @@ const Index = () => {
       </section>
 
       {/* Divider */}
-      <div className="max-w-6xl mx-auto px-6 md:px-10">
+      <div className="max-w-6xl mx-auto px-6 md:px-10 relative">
         <div className="border-t border-border" />
       </div>
 
       {/* Research */}
-      <section id="research" className="py-24 md:py-32 px-6 md:px-10 max-w-6xl mx-auto">
+      <section id="research" className="py-24 md:py-32 px-6 md:px-10 max-w-6xl mx-auto scroll-mt-20 relative">
         <FadeInSection>
           <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground mb-4">Research</p>
           <h2
@@ -167,7 +248,7 @@ const Index = () => {
       </section>
 
       {/* Safety */}
-      <section id="safety" className="bg-card">
+      <section id="safety" className="bg-card scroll-mt-20 relative">
         <div className="py-24 md:py-32 px-6 md:px-10 max-w-6xl mx-auto">
           <FadeInSection>
             <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground mb-4">Safety & Responsibility</p>
@@ -208,7 +289,7 @@ const Index = () => {
       </section>
 
       {/* Company */}
-      <section id="company" className="py-24 md:py-32 px-6 md:px-10 max-w-6xl mx-auto">
+      <section id="company" className="py-24 md:py-32 px-6 md:px-10 max-w-6xl mx-auto scroll-mt-20 relative">
         <FadeInSection>
           <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground mb-4">Company</p>
           <h2
@@ -245,7 +326,7 @@ const Index = () => {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border">
+      <footer className="border-t border-border relative">
         <div className="max-w-6xl mx-auto px-6 md:px-10 py-12 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
             <span
@@ -261,6 +342,7 @@ const Index = () => {
               <a
                 key={link.href}
                 href={link.href}
+                onClick={(e) => handleNavClick(e, link.href)}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 {link.label}
