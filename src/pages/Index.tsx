@@ -76,6 +76,7 @@ const Index = () => {
   const scrolled = useScrolled();
   const { scrollY } = useScroll();
   const smoothScrollY = useSpring(scrollY, { stiffness: 80, damping: 20 });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Parallax for hero text
   const heroY = useTransform(smoothScrollY, [0, 600], [0, 80]);
@@ -83,8 +84,19 @@ const Index = () => {
 
   const handleNavClick = useCallback((e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
+    setMobileMenuOpen(false);
     smoothScrollTo(href);
   }, []);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileMenuOpen]);
 
   const [activeSection, setActiveSection] = useState("");
 
